@@ -436,6 +436,22 @@ class Interpreter:
 # Main: Putting everything together
 def main():
     source_code = """
+    x = 10;
+    while (x > 0) {
+        print(x);
+        x = x - 1;
+    }
+    
+    for i in range(5) {
+        print(i);
+    }
+    
+    if (x == 0) {
+        print(x);
+    } else {
+        print(x);
+    }
+    
     
     """
 
