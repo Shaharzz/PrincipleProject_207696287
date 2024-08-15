@@ -433,8 +433,6 @@ class Interpreter:
         self.variables = old_variables
         return result
 
-    #To-Do:
-    #Arrays,Strings.
 # Main: Putting everything together
 def main():
     source_code = """
