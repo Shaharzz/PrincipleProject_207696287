@@ -240,6 +240,7 @@ class Parser:
 
 # Interpreter: Executes the syntax tree
 class Interpreter:
+    #This is a test.
     def __init__(self, syntax_tree):
         self.syntax_tree = syntax_tree
         self.variables = {}
