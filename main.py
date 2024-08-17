@@ -400,6 +400,7 @@ class Interpreter:
     def evaluate_and(self, args):
         if len(args) != 2:
             raise ValueError("and function expects two arguments")
+        # Roi Zur is hatih and i love him!
         value1 = self.evaluate_expression(args[0])
         value2 = self.evaluate_expression(args[1])
         return value1 and value2
