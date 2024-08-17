@@ -112,6 +112,10 @@ class Parser:
                 return self.parse_array_assignment()
             elif self.tokens[self.index + 1][1] == '=':
                 return self.parse_assignment()
+            elif self.tokens[self.index + 1][1] == '(':
+                expr = self.parse_expression()
+                self.index += 1  # skip ';'
+                return expr
         elif token_value == 'if':
             return self.parse_if_statement()
         elif token_value == 'while':
@@ -239,6 +243,8 @@ class Parser:
         elif token_type == 'IDENTIFIER':
             if self.tokens[self.index + 1][1] == '(':
                 return self.parse_function_call()
+            elif token_value in ['length', 'index', 'append', 'remove', 'add']:
+                return self.parse_array_function_call(token_value)
             elif self.tokens[self.index + 1][1] == '[':
                 array = ('IDENTIFIER', token_value)
                 self.index += 1
@@ -291,6 +297,16 @@ class Parser:
         self.index += 1  # skip ']'
         return ('ARRAY_ACCESS', array, index)
 
+    def parse_array_function_call(self, function_name):
+        self.index += 2  # skip identifier and '('
+        args = []
+        while self.tokens[self.index][1] != ')':
+            args.append(self.parse_expression())
+            if self.tokens[self.index][1] == ',':
+                self.index += 1
+        self.index += 1  # skip ')'
+        return ('ARRAY_FUNCTION_CALL', function_name, args)
+
 
 # Interpreter: Executes the syntax tree
 class Interpreter:
@@ -298,18 +314,6 @@ class Interpreter:
         self.syntax_tree = syntax_tree
         self.variables = {}
         self.functions = {}
-
-    def evaluate_function_definition(self, statement):
-        function_name = statement[1]
-        parameters = statement[2]
-        body = statement[3]
-        self.functions[function_name] = (parameters, body)
-
-    def evaluate_statement(self, statement):
-        stmt_type = statement[0]
-
-        if stmt_type == 'FUNCTION_DEF':
-            self.evaluate_function_definition(statement)
 
     def evaluate(self):
         for statement in self.syntax_tree:
@@ -330,11 +334,22 @@ class Interpreter:
             self.evaluate_for_statement(statement)
         elif stmt_type == 'PRINT':
             self.evaluate_print_statement(statement)
+        else:
+            # Handle expression statements (including function calls)
+            self.evaluate_expression(statement)
 
     def evaluate_assignment(self, statement):
         variable_name = statement[1]
         expression_value = self.evaluate_expression(statement[2])
         self.variables[variable_name] = expression_value
+
+    def evaluate_array_assignment(self, statement):
+        array_name = statement[1]
+        index = self.evaluate_expression(statement[2])
+        value = self.evaluate_expression(statement[3])
+        if array_name not in self.variables or not isinstance(self.variables[array_name], list):
+            raise ValueError(f"Array '{array_name}' is not defined.")
+        self.variables[array_name][index] = value
 
     def evaluate_if_statement(self, statement):
         condition = self.evaluate_expression(statement[1])
@@ -350,21 +365,6 @@ class Interpreter:
             for stmt in statement[2]:
                 self.evaluate_statement(stmt)
 
-    def evaluate_range(self, args):
-        if len(args) == 1:
-            start, stop, step = 0, self.evaluate_expression(args[0]), 1
-        elif len(args) == 2:
-            start, stop = self.evaluate_expression(args[0]), self.evaluate_expression(args[1])
-            step = 1
-        elif len(args) == 3:
-            start = self.evaluate_expression(args[0])
-            stop = self.evaluate_expression(args[1])
-            step = self.evaluate_expression(args[2])
-        else:
-            raise ValueError("range() takes 1-3 arguments")
-
-        return list(range(start, stop, step))
-
     def evaluate_for_statement(self, statement):
         variable = statement[1]
         iterable = self.evaluate_expression(statement[2])
@@ -379,8 +379,8 @@ class Interpreter:
         print(self.evaluate_expression(statement[1]))
 
     def evaluate_expression(self, expression):
-
         expr_type = expression[0]
+
         if expr_type == 'NUMBER':
             return expression[1]
         elif expr_type == 'IDENTIFIER':
@@ -389,6 +389,10 @@ class Interpreter:
             return self.evaluate_array_literal(expression)
         elif expr_type == 'ARRAY_ACCESS':
             return self.evaluate_array_access(expression)
+        elif expr_type == 'ARRAY_FUNCTION_CALL':
+            function_name = expression[1]
+            args = expression[2]
+            return self.evaluate_array_function_call(function_name, args)
         elif expr_type in ('+', '-', '*', '/'):
             left = self.evaluate_expression(expression[1])
             right = self.evaluate_expression(expression[2])
@@ -413,7 +417,6 @@ class Interpreter:
                 return left == right
             elif expr_type == 'NOTEQUAL':
                 return left != right
-
         elif expr_type == 'FUNCTION_CALL':
             function_name = expression[1]
             args = expression[2]
@@ -431,9 +434,81 @@ class Interpreter:
                 return self.evaluate_or(args)
             elif function_name == 'range':
                 return self.evaluate_range(args)
-
+            elif function_name == 'length':
+                return self.evaluate_length(args)
+            elif function_name == 'index':
+                return self.evaluate_index(args)
+            elif function_name == 'append':
+                return self.evaluate_append(args)
+            elif function_name == 'remove':
+                return self.evaluate_remove(args)
+            elif function_name == 'add':
+                return self.evaluate_add(args)
             else:
                 raise ValueError(f"Unknown function: {function_name}")
+
+    def evaluate_array_literal(self, expression):
+        elements = [self.evaluate_expression(e) for e in expression[1]]
+        return elements
+
+    def evaluate_array_access(self, expression):
+        array_name = expression[1][1]
+        index = self.evaluate_expression(expression[2])
+        if array_name not in self.variables or not isinstance(self.variables[array_name], list):
+            raise ValueError(f"Array '{array_name}' is not defined.")
+        return self.variables[array_name][index]
+
+    def evaluate_array_function_call(self, function_name, args):
+        if function_name == 'length':
+            return self.evaluate_length(args)
+        elif function_name == 'index':
+            return self.evaluate_index(args)
+        elif function_name == 'append':
+            return self.evaluate_append(args)
+        elif function_name == 'remove':
+            return self.evaluate_remove(args)
+        elif function_name == 'add':
+            return self.evaluate_add(args)
+        else:
+            raise ValueError(f"Unknown array function: {function_name}")
+
+    def evaluate_length(self, args):
+        array = self.evaluate_expression(args[0])
+        if not isinstance(array, list):
+            raise ValueError("Argument to 'length' must be an array.")
+        return len(array)
+
+    def evaluate_index(self, args):
+        array = self.evaluate_expression(args[0])
+        value = self.evaluate_expression(args[1])
+        if not isinstance(array, list):
+            raise ValueError("Argument to 'index' must be an array.")
+        return array.index(value)
+
+    def evaluate_append(self, args):
+        array_name = args[0][1]
+        value = self.evaluate_expression(args[1])
+        if array_name not in self.variables or not isinstance(self.variables[array_name], list):
+            raise ValueError(f"Array '{array_name}' is not defined.")
+        self.variables[array_name].append(value)
+        return self.variables[array_name]
+
+    def evaluate_remove(self, args):
+        array_name = args[0][1]
+        value = self.evaluate_expression(args[1])
+        if array_name not in self.variables or not isinstance(self.variables[array_name], list):
+            raise ValueError(f"Array '{array_name}' is not defined.")
+        self.variables[array_name].remove(value)
+        return self.variables[array_name]
+
+    def evaluate_add(self, args):
+        array_name = args[0][1]
+        index = self.evaluate_expression(args[1])
+        value = self.evaluate_expression(args[2])
+        if array_name not in self.variables or not isinstance(self.variables[array_name], list):
+            raise ValueError(f"Array '{array_name}' is not defined.")
+        self.variables[array_name].insert(index, value)
+        return self.variables[array_name]
 
     def evaluate_power(self, args):
         if len(args) != 2:
@@ -476,62 +551,6 @@ class Interpreter:
         value2 = self.evaluate_expression(args[1])
         return value1 or value2
 
-    def evaluate_function_call(self, function_name, args):
-        if function_name == 'power':
-            return self.evaluate_power(args)
-        if function_name not in self.functions:
-            raise ValueError(f"Undefined function: {function_name}")
-
-        parameters, body = self.functions[function_name]
-        if len(args) != len(parameters):
-            raise ValueError(f"Expected {len(parameters)} arguments, got {len(args)}")
-
-        # Create a new scope for the function
-        old_variables = self.variables.copy()
-        self.variables = {param: self.evaluate_expression(arg) for param, arg in zip(parameters, args)}
-
-        result = None
-        for stmt in body:
-            if stmt[0] == 'RETURN':
-                result = self.evaluate_expression(stmt[1])
-                break
-            self.evaluate_statement(stmt)
-
-        # Restore the old scope
-        self.variables = old_variables
-        return result
-
-    def evaluate_array_literal(self, array):
-        return [self.evaluate_expression(element) for element in array[1]]
-
-    def evaluate_array_access(self, array_access):
-        array = self.evaluate_expression(array_access[1])
-        index = self.evaluate_expression(array_access[2])
-        if not isinstance(array, list):
-            raise ValueError("Cannot perform array access on non-array object")
-        if not isinstance(index, int):
-            raise ValueError("Array index must be an integer")
-        if index < 0 or index >= len(array):
-            raise IndexError("Array index out of range")
-        return array[index]
-
-    def evaluate_array_assignment(self, statement):
-        array_name = statement[1]
-        index = self.evaluate_expression(statement[2])
-        value = self.evaluate_expression(statement[3])
-
-        if array_name not in self.variables:
-            raise ValueError(f"Array {array_name} is not defined")
-
-        array = self.variables[array_name]
-        if not isinstance(array, list):
-            raise ValueError(f"{array_name} is not an array")
-
-        if index < 0 or index >= len(array):
-            raise IndexError("Array index out of range")
-
-        array[index] = value
-
 
 # Main: Putting everything together
 def main():
@@ -539,12 +558,18 @@ def main():
     arr = [1, 2, 3, 4, 66];
     print(arr[2]);
     arr[1] = 10;
-    print(arr[1]); 
-
-    for i in arr {
-        print(i);
-    }
-
+    print(arr[1]);
+    print(length(arr));
+    length(arr);
+    min(2,5);
+    print(min(2,5));
+    remove(arr, 4);
+    print(arr);
+    append(arr, 100);
+    print(arr);
+    print(append(arr, 100));
+    add(arr, 2, 100);
+    print(arr);
     """
 
     lexer = Lexer(source_code)
