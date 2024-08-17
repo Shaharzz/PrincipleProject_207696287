@@ -22,7 +22,7 @@ class Lexer:
                 self.tokenize_identifier_or_keyword()
             elif self.current_char.isdigit():
                 self.tokenize_number()
-            elif self.current_char == '=' and self.source_code[self.index:self.index+1] == '=':
+            elif self.current_char == '=' and self.source_code[self.index:self.index + 1] == '=':
                 self.tokens.append(('EQUAL', '=='))
                 self.index += 1
                 self.next_char()
@@ -91,6 +91,7 @@ class Lexer:
             self.next_char()
         self.tokens.append(('NUMBER', int(number)))
 
+
 # Parser: Builds a syntax tree from tokens
 class Parser:
     def __init__(self, tokens):
@@ -152,6 +153,7 @@ class Parser:
         value = self.parse_expression()
         self.index += 1  # skip ';'
         return ('ARRAY_ASSIGN', array_name, index, value)
+
     def parse_if_statement(self):
         self.index += 1  # skip 'if'
         condition = self.parse_expression()
@@ -362,6 +364,7 @@ class Interpreter:
             raise ValueError("range() takes 1-3 arguments")
 
         return list(range(start, stop, step))
+
     def evaluate_for_statement(self, statement):
         variable = statement[1]
         iterable = self.evaluate_expression(statement[2])
@@ -371,6 +374,7 @@ class Interpreter:
             self.variables[variable] = value
             for stmt in body:
                 self.evaluate_statement(stmt)
+
     def evaluate_print_statement(self, statement):
         print(self.evaluate_expression(statement[1]))
 
@@ -457,12 +461,14 @@ class Interpreter:
         value1 = self.evaluate_expression(args[0])
         value2 = self.evaluate_expression(args[1])
         return max(value1, value2)
+
     def evaluate_and(self, args):
         if len(args) != 2:
             raise ValueError("and function expects two arguments")
         value1 = self.evaluate_expression(args[0])
         value2 = self.evaluate_expression(args[1])
         return value1 and value2
+
     def evaluate_or(self, args):
         if len(args) != 2:
             raise ValueError("or function expects two arguments")
@@ -534,10 +540,11 @@ def main():
     print(arr[2]);
     arr[1] = 10;
     print(arr[1]); 
-    
+
     for i in arr {
         print(i);
     }
+
     """
 
     lexer = Lexer(source_code)
@@ -550,6 +557,7 @@ def main():
 
     interpreter = Interpreter(syntax_tree)
     interpreter.evaluate()
+
 
 if __name__ == '__main__':
     main()
