@@ -62,6 +62,12 @@ class Lexer:
             elif self.current_char == ',':
                 self.tokens.append(('COMMA', ','))
                 self.next_char()
+            elif self.current_char == '[':
+                self.tokens.append(('LBRACKET', '['))
+                self.next_char()
+            elif self.current_char == ']':
+                self.tokens.append(('RBRACKET', ']'))
+                self.next_char()
             else:
                 raise ValueError(f"Unknown character: {self.current_char}")
         return self.tokens
@@ -100,8 +106,11 @@ class Parser:
     def parse_statement(self):
         token_type, token_value = self.tokens[self.index]
 
-        if token_type == 'IDENTIFIER' and self.tokens[self.index + 1][1] == '=':
-            return self.parse_assignment()
+        if token_type == 'IDENTIFIER':
+            if self.tokens[self.index + 1][0] == 'LBRACKET':
+                return self.parse_array_assignment()
+            elif self.tokens[self.index + 1][1] == '=':
+                return self.parse_assignment()
         elif token_value == 'if':
             return self.parse_if_statement()
         elif token_value == 'while':
@@ -116,11 +125,33 @@ class Parser:
             return expr
 
     def parse_assignment(self):
-        variable_name = self.tokens[self.index][1]
-        self.index += 2  # skip variable name and '='
-        expression = self.parse_expression()
+        if self.tokens[self.index + 1][1] == '[':
+            # Array assignment
+            array_name = self.tokens[self.index][1]
+            self.index += 1  # skip array name
+            index = self.parse_array_access(('IDENTIFIER', array_name))[2]
+            self.index += 1  # skip '='
+            expression = self.parse_expression()
+            self.index += 1  # skip ';'
+            return ('ARRAY_ASSIGN', array_name, index, expression)
+        else:
+            # Regular assignment
+            variable_name = self.tokens[self.index][1]
+            self.index += 2  # skip variable name and '='
+            expression = self.parse_expression()
+            self.index += 1  # skip ';'
+            return ('ASSIGN', variable_name, expression)
+
+    def parse_array_assignment(self):
+        array_name = self.tokens[self.index][1]
+        self.index += 1  # skip array name
+        self.index += 1  # skip '['
+        index = self.parse_expression()
+        self.index += 1  # skip ']'
+        self.index += 1  # skip '='
+        value = self.parse_expression()
         self.index += 1  # skip ';'
-        return ('ASSIGN', variable_name, expression)
+        return ('ARRAY_ASSIGN', array_name, index, value)
     def parse_if_statement(self):
         self.index += 1  # skip 'if'
         condition = self.parse_expression()
@@ -198,16 +229,21 @@ class Parser:
                 return node
             else:
                 raise ValueError("Expected closing parenthesis")
+        elif token_value == '[':
+            return self.parse_array_literal()
         elif token_type == 'NUMBER':
             self.index += 1
             return ('NUMBER', token_value)
         elif token_type == 'IDENTIFIER':
             if self.tokens[self.index + 1][1] == '(':
                 return self.parse_function_call()
+            elif self.tokens[self.index + 1][1] == '[':
+                array = ('IDENTIFIER', token_value)
+                self.index += 1
+                return self.parse_array_access(array)
             else:
                 self.index += 1
                 return ('IDENTIFIER', token_value)
-
         else:
             raise ValueError(f"Unexpected token: {token_value}")
 
@@ -236,6 +272,22 @@ class Parser:
             body.append(self.parse_statement())
         self.index += 1  # skip '}'
         return ('FOR', variable, iterable, body)
+
+    def parse_array_literal(self):
+        self.index += 1  # skip '['
+        elements = []
+        while self.tokens[self.index][1] != ']':
+            elements.append(self.parse_expression())
+            if self.tokens[self.index][1] == ',':
+                self.index += 1
+        self.index += 1  # skip ']'
+        return ('ARRAY', elements)
+
+    def parse_array_access(self, array):
+        self.index += 1  # skip '['
+        index = self.parse_expression()
+        self.index += 1  # skip ']'
+        return ('ARRAY_ACCESS', array, index)
 
 
 # Interpreter: Executes the syntax tree
@@ -266,6 +318,8 @@ class Interpreter:
 
         if stmt_type == 'ASSIGN':
             self.evaluate_assignment(statement)
+        elif stmt_type == 'ARRAY_ASSIGN':
+            self.evaluate_array_assignment(statement)
         elif stmt_type == 'IF':
             self.evaluate_if_statement(statement)
         elif stmt_type == 'WHILE':
@@ -321,11 +375,16 @@ class Interpreter:
         print(self.evaluate_expression(statement[1]))
 
     def evaluate_expression(self, expression):
+
         expr_type = expression[0]
         if expr_type == 'NUMBER':
             return expression[1]
         elif expr_type == 'IDENTIFIER':
             return self.variables[expression[1]]
+        elif expr_type == 'ARRAY':
+            return self.evaluate_array_literal(expression)
+        elif expr_type == 'ARRAY_ACCESS':
+            return self.evaluate_array_access(expression)
         elif expr_type in ('+', '-', '*', '/'):
             left = self.evaluate_expression(expression[1])
             right = self.evaluate_expression(expression[2])
@@ -368,6 +427,7 @@ class Interpreter:
                 return self.evaluate_or(args)
             elif function_name == 'range':
                 return self.evaluate_range(args)
+
             else:
                 raise ValueError(f"Unknown function: {function_name}")
 
@@ -411,6 +471,8 @@ class Interpreter:
         return value1 or value2
 
     def evaluate_function_call(self, function_name, args):
+        if function_name == 'power':
+            return self.evaluate_power(args)
         if function_name not in self.functions:
             raise ValueError(f"Undefined function: {function_name}")
 
@@ -433,10 +495,49 @@ class Interpreter:
         self.variables = old_variables
         return result
 
+    def evaluate_array_literal(self, array):
+        return [self.evaluate_expression(element) for element in array[1]]
+
+    def evaluate_array_access(self, array_access):
+        array = self.evaluate_expression(array_access[1])
+        index = self.evaluate_expression(array_access[2])
+        if not isinstance(array, list):
+            raise ValueError("Cannot perform array access on non-array object")
+        if not isinstance(index, int):
+            raise ValueError("Array index must be an integer")
+        if index < 0 or index >= len(array):
+            raise IndexError("Array index out of range")
+        return array[index]
+
+    def evaluate_array_assignment(self, statement):
+        array_name = statement[1]
+        index = self.evaluate_expression(statement[2])
+        value = self.evaluate_expression(statement[3])
+
+        if array_name not in self.variables:
+            raise ValueError(f"Array {array_name} is not defined")
+
+        array = self.variables[array_name]
+        if not isinstance(array, list):
+            raise ValueError(f"{array_name} is not an array")
+
+        if index < 0 or index >= len(array):
+            raise IndexError("Array index out of range")
+
+        array[index] = value
+
+
 # Main: Putting everything together
 def main():
     source_code = """
+    arr = [1, 2, 3, 4, 66];
+    print(arr[2]);
+    arr[1] = 10;
+    print(arr[1]); 
     
+    for i in arr {
+        print(i);
+    }
     """
 
     lexer = Lexer(source_code)
