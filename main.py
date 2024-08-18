@@ -118,6 +118,7 @@ class Lexer:
         self.next_char()  # Skip the closing quote
         self.tokens.append(('STRING', string))
 
+
 # Parser: Builds a syntax tree from tokens
 class Parser:
     def __init__(self, tokens):
@@ -352,6 +353,7 @@ class Parser:
                 self.index += 1
         self.index += 1  # skip closing '^'
         return ('TUPLE', elements)
+
 
 # Interpreter: Executes the syntax tree
 class Interpreter:
@@ -722,9 +724,12 @@ class Interpreter:
 # Main: Putting everything together
 def main():
     source_code = """
-    a=-1;
-    b=-1;
-    print(a==b);
+    if(-1==-1){
+        print("True");
+    }   
+    else{
+        print("False");
+    }
     
     """
 
@@ -743,12 +748,12 @@ def main():
 if __name__ == '__main__':
     main()
 
-#Works:
-#Mathematics
-#Loops (incl. for)
-#Conditions
-#Array + Array functions
-#Strings + String functions
+# Works:
+# Mathematics
+# Loops (incl. for)
+# Conditions
+# Array + Array functions
+# Strings + String functions
 
-#To Do:
-#Tuples
+# To Fix:
+# Negative numbers support.
