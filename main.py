@@ -68,6 +68,8 @@ class Lexer:
             elif self.current_char == ']':
                 self.tokens.append(('RBRACKET', ']'))
                 self.next_char()
+            elif self.current_char == '"':
+                self.tokenize_string()
             else:
                 raise ValueError(f"Unknown character: {self.current_char}")
         return self.tokens
@@ -90,6 +92,17 @@ class Lexer:
             number += self.current_char
             self.next_char()
         self.tokens.append(('NUMBER', int(number)))
+
+    def tokenize_string(self):
+        string = ''
+        self.next_char()  # Skip the opening quote
+        while self.current_char != '"':
+            if self.current_char is None:
+                raise ValueError("Unterminated string literal")
+            string += self.current_char
+            self.next_char()
+        self.next_char()  # Skip the closing quote
+        self.tokens.append(('STRING', string))
 
 
 # Parser: Builds a syntax tree from tokens
@@ -252,6 +265,9 @@ class Parser:
             else:
                 self.index += 1
                 return ('IDENTIFIER', token_value)
+        elif token_type == 'STRING':
+            self.index += 1
+            return ('STRING', token_value)
         else:
             raise ValueError(f"Unexpected token: {token_value}")
 
@@ -444,8 +460,20 @@ class Interpreter:
                 return self.evaluate_remove(args)
             elif function_name == 'add':
                 return self.evaluate_add(args)
+            elif function_name == 'split':
+                return self.evaluate_split(args)
+            elif function_name == 'replace':
+                return self.evaluate_replace(args)
+            elif function_name == 'isUpper':
+                return self.evaluate_isUpper(args)
+            elif function_name == 'isLower':
+                return self.evaluate_isLower(args)
+            elif function_name == 'Stringlength':
+                return self.evaluate_Stringlength(args)
             else:
                 raise ValueError(f"Unknown function: {function_name}")
+        elif expr_type == 'STRING':
+            return expression[1]
 
     def evaluate_array_literal(self, expression):
         elements = [self.evaluate_expression(e) for e in expression[1]]
@@ -551,25 +579,64 @@ class Interpreter:
         value2 = self.evaluate_expression(args[1])
         return value1 or value2
 
+    def evaluate_split(self, args):
+        if len(args) != 2:
+            raise ValueError("split function expects two arguments: string and delimiter")
+        string = self.evaluate_expression(args[0])
+        delimiter = self.evaluate_expression(args[1])
+        if not isinstance(string, str) or not isinstance(delimiter, str):
+            raise ValueError("Arguments to split must be strings")
+        return string.split(delimiter)
+
+    def evaluate_replace(self, args):
+        if len(args) != 3:
+            raise ValueError("replace function expects three arguments: string, old, new")
+        string = self.evaluate_expression(args[0])
+        old = self.evaluate_expression(args[1])
+        new = self.evaluate_expression(args[2])
+        if not isinstance(string, str) or not isinstance(old, str) or not isinstance(new, str):
+            raise ValueError("Arguments to replace must be strings")
+        return string.replace(old, new)
+
+    def evaluate_isUpper(self, args):
+        if len(args) != 1:
+            raise ValueError("isUpper function expects one argument")
+        string = self.evaluate_expression(args[0])
+        if not isinstance(string, str):
+            raise ValueError("Argument to isUpper must be a string")
+        return string.isupper()
+
+    def evaluate_isLower(self, args):
+        if len(args) != 1:
+            raise ValueError("isLower function expects one argument")
+        string = self.evaluate_expression(args[0])
+        if not isinstance(string, str):
+            raise ValueError("Argument to isLower must be a string")
+        return string.islower()
+
+    def evaluate_Stringlength(self, args):
+        if len(args) != 1:
+            raise ValueError("length function expects one argument")
+        string = self.evaluate_expression(args[0])
+        if not isinstance(string, str):
+            raise ValueError("Argument to length must be a string")
+        return len(string)
+
 
 # Main: Putting everything together
 def main():
     source_code = """
-    arr = [1, 2, 3, 4, 66];
-    print(arr[2]);
-    arr[1] = 10;
-    print(arr[1]);
-    print(length(arr));
-    length(arr);
-    min(2,5);
-    print(min(2,5));
-    remove(arr, 4);
-    print(arr);
-    append(arr, 100);
-    print(arr);
-    print(append(arr, 100));
-    add(arr, 2, 100);
-    print(arr);
+    str1 = "Hello, World!";
+    str2 = "Python Programming";
+    print(str1 + " " + str2);
+    print(Stringlength(str1));
+
+    splitresult = split(str2, " ");
+    print(splitresult);
+    print(length(splitresult));
+    
+    replacedstr = replace(str1, "World", "Universe");
+    print(replacedstr);
     """
 
     lexer = Lexer(source_code)
@@ -586,3 +653,13 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+#Works:
+#Mathematics
+#Loops (incl. for)
+#Conditions
+#Array + Array functions
+#Strings + String functions
+
+#To Do:
+#Tuples
