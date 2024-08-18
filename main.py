@@ -20,18 +20,17 @@ class Lexer:
                 self.next_char()
             elif self.current_char.isalpha():
                 self.tokenize_identifier_or_keyword()
-            elif self.current_char.isdigit():
+            elif self.current_char.isdigit() or (self.current_char == '-' and self.peek_next_char().isdigit()):
+                # Handles negative numbers: check if '-' is followed by a digit
                 self.tokenize_number()
-            elif self.current_char == '=' and self.source_code[self.index:self.index + 1] == '=':
+            elif self.current_char == '=' and self.peek_next_char() == '=':
                 self.tokens.append(('EQUAL', '=='))
                 self.index += 1
                 self.next_char()
-
-            elif self.current_char == '!' and self.source_code[self.index:self.index + 1] == '=':
+            elif self.current_char == '!' and self.peek_next_char() == '=':
                 self.tokens.append(('NOTEQUAL', '!='))
                 self.index += 1
                 self.next_char()
-
             elif self.current_char in "+-*/":
                 self.tokens.append(('OPERATOR', self.current_char))
                 self.next_char()
@@ -68,11 +67,19 @@ class Lexer:
             elif self.current_char == ']':
                 self.tokens.append(('RBRACKET', ']'))
                 self.next_char()
+            elif self.current_char == '^':
+                self.tokens.append(('CARET', '^'))
+                self.next_char()
             elif self.current_char == '"':
                 self.tokenize_string()
             else:
                 raise ValueError(f"Unknown character: {self.current_char}")
         return self.tokens
+
+    def peek_next_char(self):
+        if self.index + 1 < len(self.source_code):
+            return self.source_code[self.index + 1]
+        return None
 
     def tokenize_identifier_or_keyword(self):
         identifier = ''
@@ -88,10 +95,17 @@ class Lexer:
 
     def tokenize_number(self):
         number = ''
+        sign = 1  # Default sign is positive
+
+        if self.current_char == '-':
+            sign = -1
+            self.next_char()
+
         while self.current_char is not None and self.current_char.isdigit():
             number += self.current_char
             self.next_char()
-        self.tokens.append(('NUMBER', int(number)))
+
+        self.tokens.append(('NUMBER', int(number) * sign))
 
     def tokenize_string(self):
         string = ''
@@ -103,7 +117,6 @@ class Lexer:
             self.next_char()
         self.next_char()  # Skip the closing quote
         self.tokens.append(('STRING', string))
-
 
 # Parser: Builds a syntax tree from tokens
 class Parser:
@@ -248,11 +261,16 @@ class Parser:
                 return node
             else:
                 raise ValueError("Expected closing parenthesis")
+        elif token_value == '-':
+            self.index += 1  # Skip the minus sign
+            return ('UMINUS', self.parse_primary())
         elif token_value == '[':
             return self.parse_array_literal()
         elif token_type == 'NUMBER':
             self.index += 1
             return ('NUMBER', token_value)
+        elif token_value == '(':
+            return self.parse_tuple()
         elif token_type == 'IDENTIFIER':
             if self.tokens[self.index + 1][1] == '(':
                 return self.parse_function_call()
@@ -268,6 +286,8 @@ class Parser:
         elif token_type == 'STRING':
             self.index += 1
             return ('STRING', token_value)
+        elif token_value == '^':
+            return self.parse_tuple()
         else:
             raise ValueError(f"Unexpected token: {token_value}")
 
@@ -323,6 +343,15 @@ class Parser:
         self.index += 1  # skip ')'
         return ('ARRAY_FUNCTION_CALL', function_name, args)
 
+    def parse_tuple(self):
+        self.index += 1  # skip '^'
+        elements = []
+        while self.tokens[self.index][1] != '^':
+            elements.append(self.parse_expression())
+            if self.tokens[self.index][1] == ',':
+                self.index += 1
+        self.index += 1  # skip closing '^'
+        return ('TUPLE', elements)
 
 # Interpreter: Executes the syntax tree
 class Interpreter:
@@ -399,6 +428,8 @@ class Interpreter:
 
         if expr_type == 'NUMBER':
             return expression[1]
+        elif expr_type == 'UMINUS':
+            return -self.evaluate_expression(expression[1])
         elif expr_type == 'IDENTIFIER':
             return self.variables[expression[1]]
         elif expr_type == 'ARRAY':
@@ -470,8 +501,13 @@ class Interpreter:
                 return self.evaluate_isLower(args)
             elif function_name == 'Stringlength':
                 return self.evaluate_Stringlength(args)
+            if function_name in ['sort', 'getItem', 'tupleindex', 'tuplelength']:
+                return self.evaluate_tuple_function_call(function_name, args)
             else:
                 raise ValueError(f"Unknown function: {function_name}")
+        elif expr_type == 'TUPLE':
+            return self.evaluate_tuple_creation(expression[1])
+
         elif expr_type == 'STRING':
             return expression[1]
 
@@ -622,21 +658,74 @@ class Interpreter:
             raise ValueError("Argument to length must be a string")
         return len(string)
 
+    def evaluate_tuple_creation(self, elements):
+        return tuple(self.evaluate_expression(e) for e in elements)
+
+    def evaluate_tuple_sort(self, args):
+        if len(args) != 1:
+            raise ValueError("sort function expects one tuple argument")
+        tuple_arg = self.evaluate_expression(args[0])
+        if not isinstance(tuple_arg, tuple):
+            raise ValueError("Argument to sort must be a tuple")
+        return tuple(sorted(tuple_arg))
+
+    def evaluate_tuple_concat(self, args):
+        if len(args) != 2:
+            raise ValueError("Tuple concatenation expects two tuple arguments")
+        tuple1 = self.evaluate_expression(args[0])
+        tuple2 = self.evaluate_expression(args[1])
+        if not isinstance(tuple1, tuple) or not isinstance(tuple2, tuple):
+            raise ValueError("Both arguments must be tuples for concatenation")
+        return tuple1 + tuple2
+
+    def evaluate_tuple_getitem(self, args):
+        if len(args) != 2:
+            raise ValueError("getItem function expects two arguments: tuple and index")
+        tuple_arg = self.evaluate_expression(args[0])
+        index = self.evaluate_expression(args[1])
+        if not isinstance(tuple_arg, tuple):
+            raise ValueError("First argument to getItem must be a tuple")
+        if not isinstance(index, int):
+            raise ValueError("Second argument to getItem must be an integer")
+        return tuple_arg[index]
+
+    def evaluate_tuple_index(self, args):
+        if len(args) != 2:
+            raise ValueError("index function expects two arguments: tuple and value")
+        tuple_arg = self.evaluate_expression(args[0])
+        value = self.evaluate_expression(args[1])
+        if not isinstance(tuple_arg, tuple):
+            raise ValueError("First argument to index must be a tuple")
+        return tuple_arg.index(value)
+
+    def evaluate_tuple_length(self, args):
+        if len(args) != 1:
+            raise ValueError("length function expects one argument")
+        arg = self.evaluate_expression(args[0])
+        if not isinstance(arg, (tuple, list, str)):
+            raise ValueError("Argument to length must be a tuple, list, or string")
+        return len(arg)
+
+    def evaluate_tuple_function_call(self, function_name, args):
+        if function_name == 'sort':
+            return self.evaluate_tuple_sort(args)
+        elif function_name == 'getItem':
+            return self.evaluate_tuple_getitem(args)
+        elif function_name == 'tupleindex':
+            return self.evaluate_tuple_index(args)
+        elif function_name == 'tuplelength':
+            return self.evaluate_tuple_length(args)
+        else:
+            raise ValueError(f"Unknown tuple function: {function_name}")
+
 
 # Main: Putting everything together
 def main():
     source_code = """
-    str1 = "Hello, World!";
-    str2 = "Python Programming";
-    print(str1 + " " + str2);
-    print(Stringlength(str1));
-
-    splitresult = split(str2, " ");
-    print(splitresult);
-    print(length(splitresult));
+    a=-1;
+    b=-1;
+    print(a==b);
     
-    replacedstr = replace(str1, "World", "Universe");
-    print(replacedstr);
     """
 
     lexer = Lexer(source_code)
