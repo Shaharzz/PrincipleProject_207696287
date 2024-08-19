@@ -811,6 +811,22 @@ print([1, 2] == [2, 1]);
 print("hello" == "hello");
 print("hello" == "world");
 print("==============================");
+print("Logical operators:");
+print(and(1 == 1, 2 == 2));
+print(and(1 == 1, 2 == 3));
+print(or(1 == 1, 2 == 3));
+print(or(1 == 2, 2 == 3));
+print("==============================");
+print("Tuple concatenation:");
+print(^1, 2^ + ^3, 4^);
+print("==============================");
+print("Tuple functions:");
+print(tuplelength(^1, 2, 3^));
+print(tupleindex(^1, 2, 3^, 2));
+print(getItem(^1, 2, 3^, 1));
+print(sort(^3, 2, 1^));
+print("==============================");
+
     """
 
     lexer = Lexer(source_code)
