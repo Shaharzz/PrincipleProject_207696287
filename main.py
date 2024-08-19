@@ -23,7 +23,7 @@ class Lexer:
             elif self.current_char.isdigit() or (self.current_char == '-' and self.peek_next_char().isdigit()):
                 # Handles negative numbers: check if '-' is followed by a digit
                 self.tokenize_number()
-            elif self.current_char == '=' and self.peek_next_char() == '=':
+            elif self.current_char == '=' and self.source_code[self.index:self.index + 1] == '=':
                 self.tokens.append(('EQUAL', '=='))
                 self.index += 1
                 self.next_char()
@@ -70,6 +70,7 @@ class Lexer:
             elif self.current_char == '^':
                 self.tokens.append(('CARET', '^'))
                 self.next_char()
+
             elif self.current_char == '"':
                 self.tokenize_string()
             else:
@@ -509,7 +510,6 @@ class Interpreter:
                 raise ValueError(f"Unknown function: {function_name}")
         elif expr_type == 'TUPLE':
             return self.evaluate_tuple_creation(expression[1])
-
         elif expr_type == 'STRING':
             return expression[1]
 
@@ -720,17 +720,97 @@ class Interpreter:
         else:
             raise ValueError(f"Unknown tuple function: {function_name}")
 
+    def evaluate_range(self, args):
+        if len(args) == 1:
+            start, stop, step = 0, self.evaluate_expression(args[0]), 1
+        elif len(args) == 2:
+            start, stop = self.evaluate_expression(args[0]), self.evaluate_expression(args[1])
+            step = 1
+        elif len(args) == 3:
+            start = self.evaluate_expression(args[0])
+            stop = self.evaluate_expression(args[1])
+            step = self.evaluate_expression(args[2])
+        else:
+            raise ValueError("range() takes 1-3 arguments")
+
+        return list(range(start, stop, step))
+
 
 # Main: Putting everything together
 def main():
     source_code = """
-    if(-1==-1){
-        print("True");
-    }   
-    else{
-        print("False");
-    }
-    
+    print("==============================");
+print("Mathematics:");
+print(2 + 3 * 4);
+print(power(2, 3));
+print(square(9));
+print(min(5, 3));
+print(max(5, 3));
+print("==============================");
+print("Negative numbers:");
+print(-5 + 3);
+print(min(-5, -3));
+print("==============================");
+print("Loops:");
+sum = 0;
+for i in range(1, 5) {
+    sum = sum + i;
+}
+print(sum);
+
+i = 0;
+while i < 5 {
+    print(i);
+    i = i + 1;
+}
+print("==============================");
+print("Conditions:");
+x = 10;
+if x > 5 {
+    print("x is greater than 5");
+} else {
+    print("x is not greater than 5");
+}
+print("==============================");
+print("Arrays and Array functions:");
+arr = [1, 2, 3, 4, 5];
+print(arr);
+print(length(arr));
+append(arr, 6);
+print(arr);
+remove(arr, 3);
+print(arr);
+add(arr, 2, 10);
+print(arr);
+print(index(arr, 4));
+print("==============================");
+print("Strings and String functions:");
+str = "Hello, World!";
+print(str);
+print(Stringlength(str));
+print(isUpper(str));
+print(isLower(str));
+print(split(str, ", "));
+print(replace(str, "World", "Python"));
+print("==============================");
+print("Tuples:");
+tup = ^3, 1, 4, 1, 5, 9^;
+print(tup);
+print(sort(tup));
+print(getItem(tup, 2));
+print(tupleindex(tup, 5));
+print(tuplelength(tup));
+print("==============================");
+print("Equality comparisons:");
+print(3 == 3);
+print(3 == 4);
+print(^1, 2^ == ^1, 2^);
+print(^1, 2^ == ^2, 1^);
+print([1, 2] == [1, 2]);
+print([1, 2] == [2, 1]);
+print("hello" == "hello");
+print("hello" == "world");
+print("==============================");
     """
 
     lexer = Lexer(source_code)
